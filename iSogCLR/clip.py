@@ -475,7 +475,26 @@ def main(args):
 
         assert 0
 
-    optimizer = create_optimizer(args, model)
+    # optimizer = create_optimizer(args, model) # I comment out this line so that I can switch on AdamW and SNAG
+    if args.opt == 'adamW':
+        print(">>> USING OPTIMIZER: AdamW")
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=args.lr,
+            weight_decay=args.weight_decay
+        )
+    elif args.opt == 'snag':
+        print(">>> USING OPTIMIZER: SNAG (SGD + Nesterov)")
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=args.lr,
+            momentum=0.9,      # Standard momentum value
+            weight_decay=args.weight_decay,
+            nesterov=True      # <--- This turns SGD into SNAG!
+        )
+    else:
+        raise ValueError(f"Optimizer {args.opt} not manually implemented yet!")
+
     lr_scheduler, _ = create_scheduler(args, optimizer)
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
