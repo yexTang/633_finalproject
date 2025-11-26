@@ -4,86 +4,71 @@ import os
 import pandas as pd
 
 # --- CONFIGURATION ---
-# Add your experiments here. 
-# Format: "Label Name": "Path/to/output_directory"
+# Update this list with your actual output folder names!
 experiments = {
     "Baseline (AdamW)": "output/exp_A_adamw",
     "Challenger (SNAG)": "output/exp_B_snag",
-    # Add more experiments here later...
 }
 # ---------------------
 
 def load_log(log_path):
-    """Reads the line-by-line JSON log file."""
     data = []
     if not os.path.exists(log_path):
-        print(f"Warning: File not found {log_path}")
+        print(f"Skipping {log_path} (Not found)")
         return pd.DataFrame()
     
     with open(log_path, 'r') as f:
         for line in f:
             try:
-                data.append(json.loads(line))
+                entry = json.loads(line)
+                # Ensure epoch is present
+                if 'epoch' in entry:
+                    data.append(entry)
             except:
                 continue
     return pd.DataFrame(data)
 
-def plot_training_curves(experiments):
-    plt.figure(figsize=(10, 6))
+def plot_metrics(experiments):
+    plt.figure(figsize=(12, 5))
     
+    # Subplot 1: Training Loss
+    plt.subplot(1, 2, 1)
     for label, path in experiments.items():
         df = load_log(os.path.join(path, "coco_log.txt"))
-        if df.empty or 'train_loss_ita' not in df.columns:
-            continue
+        if df.empty: continue
+        
+        # Filter only rows that have training loss
+        train_df = df.dropna(subset=['train_loss_ita'])
+        if not train_df.empty:
+            plt.plot(train_df['epoch'], train_df['train_loss_ita'], label=label, marker='.')
             
-        # Plot Loss
-        plt.plot(df['epoch'], df['train_loss_ita'], label=f"{label} (Loss)", marker='.')
-        
-    plt.title("Training Loss over Epochs")
+    plt.title("Training Loss (Lower is Better)")
     plt.xlabel("Epoch")
-    plt.ylabel("Contrastive Loss")
-    plt.legend()
+    plt.ylabel("Loss")
     plt.grid(True, alpha=0.3)
-    plt.savefig("comparison_loss_curve.png")
-    plt.show()
-    print("Saved training curve to comparison_loss_curve.png")
+    plt.legend()
 
-def plot_final_metrics(experiments):
-    metrics = {'Experiment': [], 'Recall@1 (Mean)': [], 'Zero-Shot Acc': []}
-    
+    # Subplot 2: Validation Recall
+    plt.subplot(1, 2, 2)
     for label, path in experiments.items():
-        # 1. Get Validation Recall (from coco_log.txt)
-        df_coco = load_log(os.path.join(path, "coco_log.txt"))
-        recall = 0
-        if not df_coco.empty and 'val_r_mean' in df_coco.columns:
-            recall = df_coco['val_r_mean'].iloc[-1] # Get last epoch
-        
-        # 2. Get Zero-Shot Accuracy (from zeroshot_imagenet_log.txt)
-        # Note: This file might be separate depending on how you ran it
-        zs_path = os.path.join(path, "zeroshot_imagenet_log.txt")
-        acc = 0
-        if os.path.exists(zs_path):
-            df_zs = load_log(zs_path)
-            if not df_zs.empty and 'zeroshot_top1' in df_zs.columns:
-                acc = df_zs['zeroshot_top1'].iloc[-1]
+        df = load_log(os.path.join(path, "coco_log.txt"))
+        if df.empty: continue
 
-        metrics['Experiment'].append(label)
-        metrics['Recall@1 (Mean)'].append(recall)
-        metrics['Zero-Shot Acc'].append(acc)
-        
-    df_metrics = pd.DataFrame(metrics)
-    
-    # Plotting Bar Chart
-    df_metrics.plot(x='Experiment', y=['Recall@1 (Mean)', 'Zero-Shot Acc'], kind='bar', figsize=(10, 6))
-    plt.title("Final Performance Comparison")
-    plt.ylabel("Score")
-    plt.xticks(rotation=0)
-    plt.grid(axis='y', alpha=0.3)
-    plt.savefig("comparison_bar_chart.png")
+        # Filter only rows that have validation recall
+        val_df = df.dropna(subset=['val_r_mean'])
+        if not val_df.empty:
+            plt.plot(val_df['epoch'], val_df['val_r_mean'], label=label, marker='o')
+
+    plt.title("Validation Recall (Higher is Better)")
+    plt.xlabel("Epoch")
+    plt.ylabel("Mean Recall")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig("experiment_results.png")
+    print("Graph saved to experiment_results.png")
     plt.show()
-    print("Saved bar chart to comparison_bar_chart.png")
 
-# --- RUN ---
-print("Generating visualizations...")
-plot_training_curves(experiments)
-plot_final_metrics(experiments)
+if __name__ == "__main__":
+    plot_metrics(experiments)

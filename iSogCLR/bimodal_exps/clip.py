@@ -475,7 +475,29 @@ def main(args):
 
         assert 0
 
-    optimizer = create_optimizer(args, model)
+    # optimizer = create_optimizer(args, model) # <--- Old line commented out
+
+    if args.opt == 'adamW':
+        print(f">>> INITIALIZING OPTIMIZER: AdamW (lr={args.lr})")
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=args.lr,
+            weight_decay=args.weight_decay
+        )
+    elif args.opt == 'snag':
+        print(f">>> INITIALIZING OPTIMIZER: SNAG (SGD + Nesterov) (lr={args.lr})")
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=args.lr,
+            momentum=0.9,       # Standard momentum
+            weight_decay=args.weight_decay,
+            nesterov=True       # Nesterov momentum
+        )
+    else:
+        # Fallback for any other optimizer names
+        print(f">>> INITIALIZING OPTIMIZER: {args.opt} (Using default factory)")
+        optimizer = create_optimizer(args, model)
+
     lr_scheduler, _ = create_scheduler(args, optimizer)
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
@@ -502,7 +524,7 @@ def main(args):
             train_stats = train(model, train_loader, optimizer, tokenizer, epoch, max_epoch, warmup_steps, device, lr_scheduler, 
                                 grad_scaler, args)
             
-        if args.evaluate:
+        if args.evaluate or (epoch % 1 == 0):
             score_val_i2t_coco, score_val_t2i_coco = evaluation(model_without_ddp, val_coco_loader, tokenizer, device, args)
             # score_test_i2t_coco, score_test_t2i_coco = evaluation(model_without_ddp, test_coco_loader, tokenizer, device, args)
 
@@ -511,7 +533,7 @@ def main(args):
     
         if utils.is_main_process():  
 
-            if args.evaluate:
+            if args.evaluate or (epoch % 1 == 0):
                 val_result_coco = itm_eval(score_val_i2t_coco, score_val_t2i_coco, val_coco_loader.dataset.txt2img, val_coco_loader.dataset.img2txt)  
                 print("coco val:", val_result_coco)
                 # test_result_coco = itm_eval(score_test_i2t_coco, score_test_t2i_coco, test_coco_loader.dataset.txt2img, test_coco_loader.dataset.img2txt)    
@@ -537,7 +559,7 @@ def main(args):
                 with open(os.path.join(args.output_dir, "tau_"+str(epoch)+".pkl"), "wb") as f:
                     pickle.dump({"tau_image":tau_image, "tau_text":tau_text}, f, protocol=pickle.HIGHEST_PROTOCOL)
             
-            if args.evaluate:                
+            if args.evaluate or (epoch % 1 == 0):               
                 log_stats = {**{f'val_{k}': v for k, v in val_result_coco.items()},
                              # **{f'test_{k}': v for k, v in test_result_coco.items()},                  
                              'epoch': epoch,
@@ -558,7 +580,7 @@ def main(args):
                     with open(os.path.join(args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"), "a") as f:
                         f.write(json.dumps(zeroshot_results) + "\n")
 
-            else:
+            if not args.evaluate:
                 log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                             #  **{f'val_{k}': v for k, v in val_result_coco.items()},
                              # **{f'test_{k}': v for k, v in test_result_coco.items()},                  
