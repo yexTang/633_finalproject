@@ -1,0 +1,14 @@
+# Ignore Data Folders
+datasets/
+clip_train/
+pretrained_models/
+output/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore Zip/Tar files
+*.zip
+*.tar.gz
+*.pth
